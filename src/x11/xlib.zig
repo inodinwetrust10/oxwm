@@ -5,6 +5,7 @@ pub const c = @cImport({
     @cInclude("X11/cursorfont.h");
     @cInclude("X11/keysym.h");
     @cInclude("X11/extensions/Xinerama.h");
+    @cInclude("X11/extensions/Xrandr.h");
     @cInclude("X11/Xft/Xft.h");
 });
 
@@ -268,3 +269,10 @@ pub const XC_fleur = c.XC_fleur;
 pub const XAllowEvents = c.XAllowEvents;
 pub const ReplayPointer = c.ReplayPointer;
 pub const AnyButton = c.AnyButton;
+
+
+pub const XRRSelectInput = c.XRRSelectInput;
+pub const XRRUpdateConfiguration = c.XRRUpdateConfiguration;
+pub const RRScreenChangeNotifyMask = c.RRScreenChangeNotifyMask;
+pub const RRScreenChangeNotify = c.RRScreenChangeNotify;
+pub const XRRQueryExtension = c.XRRQueryExtension;

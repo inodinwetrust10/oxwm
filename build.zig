@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) void {
 
     exe.linkSystemLibrary("lua5.4");
     exe.linkSystemLibrary("X11");
+    exe.linkSystemLibrary("Xrandr");
     exe.linkSystemLibrary("Xinerama");
     exe.linkSystemLibrary("Xft");
     exe.linkSystemLibrary("fontconfig");
@@ -57,6 +58,7 @@ pub fn build(b: *std.Build) void {
     src_main_unit_tests.use_lld = false;
     src_main_unit_tests.linkSystemLibrary("lua5.4");
     src_main_unit_tests.linkSystemLibrary("X11");
+    src_main_unit_tests.linkSystemLibrary("Xrandr");
     src_main_unit_tests.linkSystemLibrary("Xinerama");
     src_main_unit_tests.linkSystemLibrary("Xft");
     src_main_unit_tests.linkSystemLibrary("fontconfig");

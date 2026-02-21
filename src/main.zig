@@ -20,7 +20,7 @@ const overlay_mod = @import("overlay.zig");
 const Display = display_mod.Display;
 const Client = client_mod.Client;
 const Monitor = monitor_mod.Monitor;
-
+var randr_event_base: c_int = 0;
 var running: bool = true;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
@@ -101,7 +101,7 @@ fn print_help() void {
         \\    Run 'oxwm --init' to create a config file
         \\    Or just start oxwm and it will create one automatically
         \\
-    , .{});
+        , .{});
 }
 
 fn get_config_path(allocator: std.mem.Allocator) ![]u8 {
@@ -218,19 +218,19 @@ pub fn main() !void {
     if (lua.init(&config)) {
         const loaded = if (std.fs.cwd().statFile(config_path)) |_|
             lua.load_file(config_path)
-        else |_| blk: {
-            init_config(allocator);
-            break :blk lua.load_config();
-        };
+            else |_| blk: {
+                init_config(allocator);
+                break :blk lua.load_config();
+            };
 
-        if (loaded) {
-            config_path_global = config_path;
-            std.debug.print("loaded config from {s}\n", .{config_path});
-            apply_config_values();
-        } else {
-            std.debug.print("no config found, using defaults\n", .{});
-            initialize_default_config();
-        }
+            if (loaded) {
+                config_path_global = config_path;
+                std.debug.print("loaded config from {s}\n", .{config_path});
+                apply_config_values();
+            } else {
+                std.debug.print("no config found, using defaults\n", .{});
+                initialize_default_config();
+            }
     } else {
         std.debug.print("failed to init lua, using defaults\n", .{});
         initialize_default_config();
@@ -254,6 +254,10 @@ pub fn main() !void {
 
     std.debug.print("successfully became window manager\n", .{});
 
+    var randr_error_base: c_int = 0;
+    if (xlib.XRRQueryExtension(display.handle, &randr_event_base, &randr_error_base) != 0) {
+        _ = xlib.XRRSelectInput(display.handle, display.root, xlib.RRScreenChangeNotifyMask);
+    }
     setup_atoms(&display);
     setup_cursors(&display);
     client_mod.init(allocator);
@@ -489,7 +493,7 @@ fn apply_config_values() void {
 
 fn init_monitor_gaps(mon: *Monitor) void {
     const any_gap_nonzero = config.gap_inner_h != 0 or config.gap_inner_v != 0 or
-                            config.gap_outer_h != 0 or config.gap_outer_v != 0;
+        config.gap_outer_h != 0 or config.gap_outer_v != 0;
 
     if (config.gaps_enabled and any_gap_nonzero) {
         mon.gap_inner_h = config.gap_inner_h;
@@ -721,6 +725,11 @@ fn run_event_loop(display: *Display) void {
 }
 
 fn handle_event(display: *Display, event: *xlib.XEvent) void {
+    if (randr_event_base != 0 and event.type == randr_event_base + xlib.RRScreenChangeNotify) {
+        _ = xlib.XRRUpdateConfiguration(event); // Updates Xlib's internal screen size struct
+        update_monitors_geometry(display);
+        return;
+    }
     const event_type = events.get_event_type(event);
 
     if (event_type == .button_press) {
@@ -1075,26 +1084,26 @@ fn reload_config(display: *Display) void {
 
     const loaded = if (config_path_global) |path|
         lua.load_file(path)
-    else
-        lua.load_config();
+        else
+            lua.load_config();
 
-    if (loaded) {
-        if (config_path_global) |path| {
-            std.debug.print("reloaded config from {s}\n", .{path});
+        if (loaded) {
+            if (config_path_global) |path| {
+                std.debug.print("reloaded config from {s}\n", .{path});
+            } else {
+                std.debug.print("reloaded config from ~/.config/oxwm/config.lua\n", .{});
+            }
+            apply_config_values();
         } else {
-            std.debug.print("reloaded config from ~/.config/oxwm/config.lua\n", .{});
+            std.debug.print("reload failed, restoring defaults\n", .{});
+            initialize_default_config();
         }
-        apply_config_values();
-    } else {
-        std.debug.print("reload failed, restoring defaults\n", .{});
-        initialize_default_config();
-    }
 
-    bar_mod.destroy_bars(gpa.allocator(), display.handle);
-    setup_bars(gpa.allocator(), display);
-    rebuild_bar_blocks();
+        bar_mod.destroy_bars(gpa.allocator(), display.handle);
+        setup_bars(gpa.allocator(), display);
+        rebuild_bar_blocks();
 
-    grab_keybinds(display);
+        grab_keybinds(display);
 }
 
 fn rebuild_bar_blocks() void {
@@ -1581,29 +1590,29 @@ fn set_layout(layout_name: ?[]const u8) void {
 
     const new_lt: u32 = if (std.mem.eql(u8, name, "tiling") or std.mem.eql(u8, name, "[]="))
         0
-    else if (std.mem.eql(u8, name, "monocle") or std.mem.eql(u8, name, "[M]"))
-        1
-    else if (std.mem.eql(u8, name, "floating") or std.mem.eql(u8, name, "><>"))
-        2
-    else if (std.mem.eql(u8, name, "scrolling") or std.mem.eql(u8, name, "[S]"))
-        3
-    else if (std.mem.eql(u8, name, "grid") or std.mem.eql(u8, name, "[#]"))
-        4
-    else {
-        std.debug.print("set_layout: unknown layout '{s}'\n", .{name});
-        return;
-    };
+        else if (std.mem.eql(u8, name, "monocle") or std.mem.eql(u8, name, "[M]"))
+            1
+                else if (std.mem.eql(u8, name, "floating") or std.mem.eql(u8, name, "><>"))
+                    2
+                        else if (std.mem.eql(u8, name, "scrolling") or std.mem.eql(u8, name, "[S]"))
+                            3
+                                else if (std.mem.eql(u8, name, "grid") or std.mem.eql(u8, name, "[#]"))
+                                    4
+                                        else {
+                                            std.debug.print("set_layout: unknown layout '{s}'\n", .{name});
+                                            return;
+                                        };
 
-    monitor.sel_lt = new_lt;
-    monitor.pertag.sellts[monitor.pertag.curtag] = new_lt;
-    if (new_lt != 3) {
-        monitor.scroll_offset = 0;
-    }
-    arrange(monitor);
-    bar_mod.invalidate_bars();
-    if (monitor.lt[monitor.sel_lt]) |layout| {
-        std.debug.print("set_layout: {s}\n", .{layout.symbol});
-    }
+                                        monitor.sel_lt = new_lt;
+                                        monitor.pertag.sellts[monitor.pertag.curtag] = new_lt;
+                                        if (new_lt != 3) {
+                                            monitor.scroll_offset = 0;
+                                        }
+                                        arrange(monitor);
+                                        bar_mod.invalidate_bars();
+                                        if (monitor.lt[monitor.sel_lt]) |layout| {
+                                            std.debug.print("set_layout: {s}\n", .{layout.symbol});
+                                        }
 }
 
 fn set_layout_index(index: u32) void {
@@ -2606,4 +2615,51 @@ fn run_autostart_commands(_: std.mem.Allocator, commands: []const []const u8) !v
 
 test {
     _ = @import("x11/events.zig");
+}
+
+fn update_monitors_geometry(display: *Display) void {
+    tiling.set_screen_size(display.screen_width(), display.screen_height());
+    // Update existing monitor structs with new dimensions
+    if (xlib.XineramaIsActive(display.handle) != 0) {
+        var screen_count: c_int = 0;
+        const screens = xlib.XineramaQueryScreens(display.handle, &screen_count);
+        if (screen_count > 0 and screens != null) {
+            var current_mon = monitor_mod.monitors;
+            var index: usize = 0;
+            while (current_mon) |m| {
+                if (index < @as(usize, @intCast(screen_count))) {
+                    const screen = screens[index];
+                    m.mon_x = screen.x_org;
+                    m.mon_y = screen.y_org;
+                    m.mon_w = screen.width;
+                    m.mon_h = screen.height;
+                    m.win_x = screen.x_org;
+                    m.win_y = screen.y_org;
+                    m.win_w = screen.width;
+                    m.win_h = screen.height;
+                    init_monitor_gaps(m);
+                }
+                current_mon = m.next;
+                index += 1;
+            }
+            _ = xlib.XFree(@ptrCast(screens));
+        }
+    } else {
+        if (monitor_mod.monitors) |m| {
+            m.mon_w = display.screen_width();
+            m.mon_h = display.screen_height();
+            m.win_w = display.screen_width();
+            m.win_h = display.screen_height();
+            init_monitor_gaps(m);
+        }
+    }
+    // Force layouts to recalculate and redraw the top bar
+    var current_mon = monitor_mod.monitors;
+    while (current_mon) |m| {
+        arrange(m);
+        current_mon = m.next;
+    }
+    bar_mod.destroy_bars(gpa.allocator(), display.handle);
+    setup_bars(gpa.allocator(), display);
+    rebuild_bar_blocks();
 }
