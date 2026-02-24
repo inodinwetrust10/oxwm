@@ -2112,6 +2112,7 @@ fn handle_property_notify(display: *Display, event: *xlib.XPropertyEvent) void {
         bar_mod.invalidate_bars();
     } else if (event.atom == xlib.XA_WM_NAME or event.atom == net_wm_name) {
         update_title(display, client);
+        bar_mod.invalidate_bars();
     } else if (event.atom == net_wm_window_type) {
         update_window_type(display, client);
     }

@@ -200,6 +200,49 @@ pub const Bar = struct {
         self.draw_text(display, x_position, @divTrunc(self.height + self.font_height, 2) - 4, layout_symbol, self.scheme_normal.foreground);
         x_position += self.text_width(display, layout_symbol) + padding;
 
+        var blocks_total_width: i32 = 0;
+        for (self.blocks.items) |*block| {
+            blocks_total_width += self.text_width(display, block.get_content()) + padding;
+        }
+
+        const title_max_x = self.width - padding - blocks_total_width;
+        const title_max_width = title_max_x - x_position;
+        if (title_max_width > 0) {
+            if (monitor.sel) |sel| {
+                const full_title = std.mem.sliceTo(&sel.name, 0);
+                if (full_title.len > 0) {
+                    var title_buf: [259]u8 = undefined;
+                    var title: []const u8 = full_title;
+                    if (self.text_width(display, full_title) > title_max_width) {
+                        @memcpy(title_buf[0..full_title.len], full_title);
+                        var low: usize = 0;
+                        var high: usize = full_title.len;
+                        var best: usize = 0;
+                        while (low <= high) {
+                            const mid = low + (high - low) / 2;
+                            @memcpy(title_buf[mid .. mid + 3], "...");
+                            if (self.text_width(display, title_buf[0 .. mid + 3]) <= title_max_width) {
+                                best = mid;
+                                low = mid + 1;
+                            } else {
+                                if (mid == 0) break;
+                                high = mid - 1;
+                            }
+                        }
+                        if (best > 0) {
+                            @memcpy(title_buf[best .. best + 3], "...");
+                            title = title_buf[0 .. best + 3];
+                        } else {
+                            title = "";
+                        }
+                    }
+                    if (title.len > 0) {
+                        self.draw_text(display, x_position, @divTrunc(self.height + self.font_height, 2) - 4, title, self.scheme_normal.foreground);
+                    }
+                }
+            }
+        }
+
         var block_x: i32 = self.width - padding;
         var block_index: usize = self.blocks.items.len;
         while (block_index > 0) {
